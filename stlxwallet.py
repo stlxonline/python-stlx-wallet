@@ -54,9 +54,13 @@ def exit():
 
 def litering_by_64(a):
 	return '\n'.join([a[i:i + 64] for i in range(0, len(a), 64)])
+	
+def ec_sign(data, key):
+	signature = OpenSSL.crypto.sign(key, data.encode(), "sha256")
+	return base58.b58encode(signature)
 
 def check_wallet_build(node):
-	build = 1
+	build = 2
 	try:
 		nresponse = requests.get('https://' + str(node) + '/server.php?q=walletbuild')
 		data = nresponse.json()
@@ -199,33 +203,41 @@ def balloon_hash(password, salt):
 	space_cost = 24
 	return balloon(password, salt, space_cost, time_cost, delta=delta).hex()
 
-def worker(num, node, dictmgr, diff, miningid):
+def worker(num, address, node, dictmgr, diff, miningid, s):
 	dictmgr[1] = 0
 	dictmgr[2] = 0
-	dictmgr[3] = 0
+	dictmgr[3] = []
 	response = ""
 	run = 1
 	errors = 0
-	node = "stlx.online"
 	
 	while(run):
 		try:
-			nresponse = requests.get('https://' + str(node) + '/server.php?q=getminingtemplate&id=' + str(miningid))
+			nresponse = s.get('https://' + str(node) + '/server.php?q=getminingtemplate&id=' + str(miningid))
 			data = nresponse.json()
 			dictmgr[1] = data
+			nresponse = s.get('https://stlx.online/server.php?q=getpoolbalance&a=' + str(address))
+			balance = nresponse.json()
 			#print(str(dictmgr[1]))
 			if response != dictmgr[1]:
 				response = dictmgr[1]
 				if num == 0:
-					print("[Mining] New block: " + str(dictmgr[1]['result']['height'])) # + ", 16block diff: " + str(dictmgr[1]['result']['difficulty']))
-			time.sleep(5)
+					print("[Mining] New block: " + str(dictmgr[1]['result']['height']) + ", Pending balance: " + str(balance['balance']/10000)) + " STLX" # + ", 16block diff: " + str(dictmgr[1]['result']['difficulty']))
+			time.sleep(10)
 			errors = 0
+			try:
+				if(len(dictmgr[3]) > 500):
+					hashjson = json.dumps(dictmgr[3])
+					dictmgr[2] = dictmgr[2] + len(dictmgr[3])
+					hashes = []
+					dictmgr[3] = hashes
+					sresponse = s.post('https://stlx.online/srng.php?wid=' + address, json=hashjson)
+			except Exception as e:
+				print(e)
 		except Exception as e:
-			#print(str(e))
 			errors = errors + 1
 			if errors % 8 == 0:
 				print("Connection error. Retrying...")
-			#time.sleep(2)
 		except KeyboardInterrupt:
 			run = 0
 			print('Interrupted')
@@ -239,26 +251,17 @@ def mining(num, address, privkey, pubkey, miningid, cores, dictmgr, diff):
 	response = ""
 	run = 1
 	errors = 0
-	hashaddr = address
-	hashes = []
-	shn = 0
 	
 	while(run):
 		try:
-			if (int(time.time()) % 10 == num and int(time.time()) != printed):
+			if (int(time.time()) % 30 == num and int(time.time()) != printed):
 				printed = int(time.time())
-				print("[Mining] " + "Thread " + str(num) + ": " + str(n/(int(time.time()+1)-it)) + " h/s, Shares: " + str(shn))
+				print("[Mining] " + "Thread " + str(num) + ": " + str(round(n/(int(time.time()+1)-it),2)) + " h/s, Shares: " + str(dictmgr[2]))
 			a = randomword(16)
 			res = balloon_hash(address + "-" + str(dictmgr[1]['result']['height']) + "-" + str(dictmgr[1]['result']['difficulty']) + "-" + str(dictmgr[1]['result']['prevhash']), a)
+			hashes = dictmgr[3]
 			hashes.append([a, res])
-			if(len(hashes) > n/(int(time.time()+1)-it) * 8):
-				try:
-					hashjson = json.dumps(hashes)
-					shn = shn + len(hashes)
-					hashes = []
-					sresponse = requests.post('https://stlx.online/srng.php?wid=' + address, json=hashjson)
-				except Exception as e:
-					print(e)
+			dictmgr[3] = hashes
 			n = n+1
 			errors = 0
 		except Exception as e:
@@ -319,6 +322,11 @@ def print_help():
 	print("exit: Closes the wallet.")
 	print("help: Shows this information.")
 	print("keys: Shows your private and public keys.")
+	print("send: Sends STLX to another address.")
+	print("    usage: send destination_address amount")
+	print("startmining: Starts the mining process.")
+	print("    usage: startmining number_of_threads")
+	print("stopmining: Stops the mining process.")
 	print("version: Shows software version.")
 	print("")
 	return
@@ -326,10 +334,14 @@ def print_help():
 def suboption(walletinfo):
 	suboption = ""
 	decimal = 10000
+	maxfee = 1000
+	minfee = 1
 	node = "stlx.online"
+	vfee = 0.0001
 	server = 1
 	ismining = 0
 	miningid = randomword(12)
+	s = requests.Session()
 	if server < 0:
 		print("[ERROR!] Unable to connect " + str(node))
 		print("")
@@ -368,8 +380,52 @@ def suboption(walletinfo):
 			print("")
 		if soption[0] == "version":
 			print("")
-			print("v0.0.1a, codename: Chur")
+			print("v0.0.3, codename: Chur")
 			print("")
+		if soption[0] == "send":
+			print("")
+			if len(soption) == 3:
+				try:
+					amount = float(soption[2])
+					amount = amount*decimal
+					dest = suboption.split(" ")[1]
+					fee = round(amount*vfee, 0)
+					if fee > maxfee:
+						fee = maxfee
+					if fee < minfee:
+						fee = minfee
+					amount = int(amount)
+					fee = int(fee)
+					message = ""
+					version = "1"
+					date = int(time.time())
+					txinfo = str(amount) + "-" + str(fee) + "-"  + str(dest) + "-" + str(message) + "-" + str(version) + "-" + str(walletinfo[2]) + "-" + str(date)
+					signature = ec_sign(txinfo, walletinfo[3])
+					validateinput = ""
+					print("Sending " + str(round(float(amount)/decimal, 4)) + " STLX to " + dest + ", with fees: " + str(round(float(fee)/decimal, 4)) + " STLX.")
+					print("")
+					while validateinput.lower() != "y" and validateinput.lower() != "n":
+						validateinput = input("Do it? y/n?")
+						if validateinput.lower() == "y":
+							print("")
+							print("Sending...")
+							url = 'https://stlx.online/server.php?q=transfer'
+							txvalues = {'amount' : str(amount), 'fee' : str(fee), 'dest' : str(dest), 'pubkey' : str(walletinfo[2]), 'date' : str(date), 'version' : str(version), 'message' : str(message), 'signature' : str(signature) }
+							txjson = json.dumps(txvalues)
+							txresponse = s.post(url, json=txjson)
+							txjsondata = txresponse.json()
+							if txjsondata['status'] == 'OK':
+								print("[INFO!] Transaction complete! Hash: " + str(txjsondata['response']))
+							else:
+								print("[ERROR!] Transaction error: " + str(txjsondata['response']))
+						elif validateinput.lower() == "n":
+							print("[INFO!] Transfer cancelled")
+						else:
+							print("Invalid option! Please, type y or n")
+				except Exception as e:
+					print(e)
+					print("Invalid arguments!")
+					print("[Usage] send destination_address amount")
 		if soption[0] == "startmining":
 			print("")
 			if len(soption) == 2 and ismining == 0:
@@ -385,7 +441,7 @@ def suboption(walletinfo):
 					threads = [None] * cores
 					for i in range(cores):
 						if i == 0:
-							params = [i, node, dictmgr, 0, miningid]
+							params = [i, walletinfo[0], node, dictmgr, 0, miningid, s]
 							threads[i] = Process(target=worker, args=(params))
 						else:
 							params = [i, walletinfo[0], walletinfo[1], walletinfo[2], miningid, cores, dictmgr, 0]
@@ -422,22 +478,6 @@ def suboption(walletinfo):
 			print_help()
 		print("")
 	print("")
-
-def get_result(hash, diff):
-	positions = [1, 2, 3, 5, 7, 11, 13, 17]
-	val = 0;
-	n=1;
-	max = 0;
-	for pos in positions:
-		val = val + (int(hash[pos], 16)*(16**n))
-		n = n + 1
-		max = max + (15*(16**n))
-	
-	maxaccepted = round(max/int(diff), 0)
-	if val <= maxaccepted:
-		return 1
-	else:
-		return 0
 
 if __name__ == '__main__':
 	multiprocessing.freeze_support()
