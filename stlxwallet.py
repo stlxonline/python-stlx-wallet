@@ -60,7 +60,7 @@ def ec_sign(data, key):
 	return base58.b58encode(signature)
 
 def check_wallet_build(node):
-	build = 2
+	build = 4
 	try:
 		nresponse = requests.get('https://' + str(node) + '/server.php?q=walletbuild')
 		data = nresponse.json()
@@ -324,9 +324,12 @@ def print_help():
 	print("keys: Shows your private and public keys.")
 	print("send: Sends STLX to another address.")
 	print("    usage: send destination_address amount")
+	print("sendtoken: Sends tokens to another address.")
+	print("    usage: send token_symbol destination_address amount")
 	print("startmining: Starts the mining process.")
 	print("    usage: startmining number_of_threads")
 	print("stopmining: Stops the mining process.")
+	print("tokens: Shows your tokens balance.")
 	print("version: Shows software version.")
 	print("")
 	return
@@ -370,6 +373,16 @@ def suboption(walletinfo):
 			bdata = response.json()
 			print ("Available: " + str(round(float(bdata['balance'])/decimal, 4)) + " STLX\nLocked: " + str(round(float(bdata['locked'])/decimal, 4)) + " STLX")
 			print("")
+		if soption[0] == "tokens":
+			print("")
+			response = requests.get('https://stlx.online/server.php?q=gettokensbalance&address=' + str(walletinfo[0]))
+			bdata = response.json()
+			for token in bdata['tokensbalance']:
+				tresponse = requests.get('https://stlx.online/server.php?q=gettokeninfo&token=' + str(token))
+				tdata = tresponse.json()
+				print("---- " + str(tdata["token"]["name"]) + " ----")
+				print("Available: " + str(round(float(bdata['tokensbalance'][token][1])/100000000, 4)) + " " + str(token) + "\nLocked: " + str(round(float(bdata['tokensbalance'][token][0])/100000000, 4)) + " " + str(token))
+				print("")
 		if soption[0] == "keys":
 			print("")
 			print("Private key image: ")
@@ -426,6 +439,54 @@ def suboption(walletinfo):
 					print(e)
 					print("Invalid arguments!")
 					print("[Usage] send destination_address amount")
+		if soption[0] == "sendtoken":
+			print("")
+			if len(soption) == 4:
+				try:
+					token = str(soption[1])
+					tresponse = requests.get('https://stlx.online/server.php?q=gettokeninfo&token=' + str(token))
+					tdata = tresponse.json()
+					if tdata["status"] == "OK":
+						tokendecimal = pow(10, int(tdata["token"]["decimals"]))
+						amount = float(soption[3])
+						amount = amount*tokendecimal
+						dest = suboption.split(" ")[2]
+						fee = 100
+						amount = int(amount)
+						fee = int(fee)
+						message = ""
+						version = "1"
+						date = int(time.time())
+						txinfo = str(amount) + "-" + str(fee) + "-"  + str(dest) + "-" + str(message) + "-" + str(version) + "-" + str(walletinfo[2]) + "-" + str(date) + "-" + str(token)
+						signature = ec_sign(txinfo, walletinfo[3])
+						validateinput = ""
+						print("Sending " + str(round(float(amount)/tokendecimal, 4)) + " " + str(token) + " to " + dest + ", with fees: " + str(round(float(fee)/decimal, 4)) + " STLX.")
+						print("")
+						while validateinput.lower() != "y" and validateinput.lower() != "n":
+							validateinput = input("Do it? y/n?")
+							if validateinput.lower() == "y":
+								print("")
+								print("Sending...")
+								url = 'https://stlx.online/server.php?q=transfer&symbol=' + str(token)
+								txvalues = {'amount' : str(amount), 'fee' : str(fee), 'dest' : str(dest), 'pubkey' : str(walletinfo[2]), 'date' : str(date), 'version' : str(version), 'message' : str(message), 'signature' : str(signature) }
+								txjson = json.dumps(txvalues)
+								txresponse = s.post(url, json=txjson)
+								txjsondata = txresponse.json()
+								if txjsondata['status'] == 'OK':
+									print("[INFO!] Transaction complete! Hash: " + str(txjsondata['response']))
+								else:
+									print("[ERROR!] Transaction error: " + str(txjsondata['response']))
+							elif validateinput.lower() == "n":
+								print("[INFO!] Transfer cancelled")
+							else:
+								print("Invalid option! Please, type y or n")
+					else:
+						print("ERROR: " + token + " not exists")
+						print("")
+				except Exception as e:
+					print(e)
+					print("Invalid arguments!")
+					print("[Usage] send token_symbol destination_address amount")
 		if soption[0] == "startmining":
 			print("")
 			if len(soption) == 2 and ismining == 0:
