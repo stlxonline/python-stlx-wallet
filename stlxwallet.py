@@ -4,7 +4,6 @@ import OpenSSL
 from OpenSSL import crypto, SSL
 import base64
 import base58
-import sqlite3
 import multiprocessing
 from multiprocessing import Process, Manager
 import time
