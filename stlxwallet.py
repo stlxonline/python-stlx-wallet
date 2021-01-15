@@ -331,7 +331,7 @@ def suboption(walletinfo):
 			print("")
 		if soption[0] == "version":
 			print("")
-			print("v0.0.5, codename: Chur")
+			print("v0.0.3, codename: Chur")
 			print("")
 		if soption[0] == "send":
 			print("")
