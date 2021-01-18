@@ -121,9 +121,9 @@ def balloon(password, salt, space_cost, time_cost, delta=3) -> bytes:
 
 
 def balloon_hash(password, salt):
-	delta = 6
-	time_cost = 12
-	space_cost = 24
+	delta = 1
+	time_cost = 1
+	space_cost = 1
 	return balloon(password, salt, space_cost, time_cost, delta=delta).hex()
 
 def get_result(hashv):
@@ -318,7 +318,7 @@ def suboption(walletinfo):
 			for token in bdata['tokensbalance']:
 				tresponse = requests.get('https://' + str(node) + '/server.php?q=gettokeninfo&token=' + str(token))
 				tdata = tresponse.json()
-				print("---- " + str(tdata["token"]["name"]) + " ----")
+				print("---- " + str(tdata["token"][0]["name"]) + " ----")
 				print("Available: " + str(round(float(bdata['tokensbalance'][token][1])/decimal, pdecimal)) + " " + str(token) + "\nLocked: " + str(round(float(bdata['tokensbalance'][token][0])/decimal, pdecimal)) + " " + str(token))
 				print("")
 		if soption[0] == "keys":
@@ -380,11 +380,11 @@ def suboption(walletinfo):
 			if len(soption) == 4:
 				try:
 					token = str(soption[1])
-					tresponse = requests.get('https://' + str(node) + '/server.php?q=gettokeninfo&token=' + str(token))
+					tresponse = requests.get('https://' + str(node) + '/server.php?q=gettokeninfo&token=' + str(token).upper())
 					tdata = tresponse.json()
 					if tdata["status"] == "OK":
-						tokendecimal = pow(10, int(tdata["token"]["decimals"]))
-						ptokendecimal = int(tdata["token"]["decimals"])
+						tokendecimal = pow(10, int(tdata["token"][0]["decimals"]))
+						ptokendecimal = int(tdata["token"][0]["decimals"])
 						amount = float(soption[3])
 						amount = amount*tokendecimal
 						dest = suboption.split(" ")[2]
