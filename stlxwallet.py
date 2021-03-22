@@ -121,9 +121,9 @@ def balloon(password, salt, space_cost, time_cost, delta=3) -> bytes:
 
 
 def balloon_hash(password, salt):
-	delta = 1
-	time_cost = 1
-	space_cost = 1
+	delta = 6
+	time_cost = 12
+	space_cost = 24
 	return balloon(password, salt, space_cost, time_cost, delta=delta).hex()
 
 def get_result(hashv):
