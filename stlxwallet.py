@@ -484,7 +484,7 @@ if __name__ == '__main__':
 		print("X: Close wallet. ")
 		print(" ")
 		option = ""
-		print(balloon_hash("hola", "adios"))
+
 		while option.lower() != "n" and option.lower() != "o" and option.lower() != "x":
 			option = input("Type an option:  ")
 			if option.lower() == "n":
