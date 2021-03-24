@@ -49,9 +49,9 @@ def ec_sign(data, key):
 	return base58.b58encode(signature)
 
 def check_wallet_build(node):
-	build = 5
+	build = 7
 	try:
-		nresponse = requests.get('https://' + str(node) + '/server.php?q=walletbuild')
+		nresponse = requests.get('https://' + str(node) + '/api?q=walletbuild')
 		data = nresponse.json()
 		if int(data['minwalletbuild']) > build:
 			return 0
@@ -59,7 +59,7 @@ def check_wallet_build(node):
 			return 1
 	except Exception as e:
 		try:
-			nresponse = requests.get('https://' + str(node) + '/server.php?q=walletbuild')
+			nresponse = requests.get('https://' + str(node) + '/api?q=walletbuild')
 			data = nresponse.json()
 			if int(data['minwalletbuild']) > build:
 				return 0
@@ -75,7 +75,7 @@ def check_nodes():
 	print("[INFO] Checking nodes...")
 	for n in nodes:
 		try:
-			nresponse = requests.get('https://' + str(n) + '/server.php?q=getminers')
+			nresponse = requests.get('https://' + str(n) + '/api?q=getminers')
 			data = nresponse.json()
 			if int(data['miners']) < x:
 				node = n
@@ -155,10 +155,10 @@ def worker(num, address, node, dictmgr, diff, miningid, s):
 	
 	while(run):
 		try:
-			nresponse = s.get('https://' + str(node) + '/server.php?q=getminingtemplate&id=' + str(miningid))
+			nresponse = s.get('https://' + str(node) + '/api?q=getminingtemplate&id=' + str(miningid))
 			data = nresponse.json()
 			dictmgr[1] = data
-			#nresponse = s.get('https://' + str(node) + '/server.php?q=getpoolbalance&a=' + str(address))
+			#nresponse = s.get('https://' + str(node) + '/api?q=getpoolbalance&a=' + str(address))
 			#balance = nresponse.json()
 			if response != dictmgr[1]:
 				response = dictmgr[1]
@@ -168,7 +168,7 @@ def worker(num, address, node, dictmgr, diff, miningid, s):
 			errors = 0
 			try:
 				dmgr4 = dictmgr[3]
-				nresponse = s.get('https://' + str(node) + '/server.php?q=submitshare&address=' + str(address) + '&diff=' + str(dmgr4[0]) + '&nonce=' + str(dmgr4[1]) + '&hash=' + str(dmgr4[2]))
+				nresponse = s.get('https://' + str(node) + '/api?q=submitshare&address=' + str(address) + '&diff=' + str(dmgr4[0]) + '&nonce=' + str(dmgr4[1]) + '&hash=' + str(dmgr4[2]))
 				print('[Worker] Share sent with diff: ' + str(dmgr4[0]) + ', hash: ' + str(dmgr4[2]))
 				dictmgr[3] = dmgr3
 				dictmgr[2] = dictmgr[2] + 1
@@ -307,16 +307,16 @@ def suboption(walletinfo):
 			print("")
 		if soption[0] == "balance":
 			print("")
-			response = requests.get('https://' + str(node) + '/server.php?q=getbalance&address=' + str(walletinfo[0]))
+			response = requests.get('https://' + str(node) + '/api?q=getbalance&address=' + str(walletinfo[0]))
 			bdata = response.json()
 			print ("Available: " + str(round(float(bdata['balance'])/decimal, pdecimal)) + " STLX\nLocked: " + str(round(float(bdata['locked'])/decimal, pdecimal)) + " STLX")
 			print("")
 		if soption[0] == "tokens":
 			print("")
-			response = requests.get('https://' + str(node) + '/server.php?q=gettokensbalance&address=' + str(walletinfo[0]))
+			response = requests.get('https://' + str(node) + '/api?q=gettokensbalance&address=' + str(walletinfo[0]))
 			bdata = response.json()
 			for token in bdata['tokensbalance']:
-				tresponse = requests.get('https://' + str(node) + '/server.php?q=gettokeninfo&token=' + str(token))
+				tresponse = requests.get('https://' + str(node) + '/api?q=gettokeninfo&token=' + str(token))
 				tdata = tresponse.json()
 				print("---- " + str(tdata["token"][0]["name"]) + " ----")
 				print("Available: " + str(round(float(bdata['tokensbalance'][token][1])/decimal, pdecimal)) + " " + str(token) + "\nLocked: " + str(round(float(bdata['tokensbalance'][token][0])/decimal, pdecimal)) + " " + str(token))
@@ -331,7 +331,7 @@ def suboption(walletinfo):
 			print("")
 		if soption[0] == "version":
 			print("")
-			print("v0.0.3, codename: Chur")
+			print("v0.0.7, codename: Chur")
 			print("")
 		if soption[0] == "send":
 			print("")
@@ -340,15 +340,12 @@ def suboption(walletinfo):
 					amount = float(soption[2])
 					amount = amount*decimal
 					dest = suboption.split(" ")[1]
-					fee = round(amount*vfee, 0)
-					if fee < minfee:
-						fee = minfee
 					amount = int(amount)
-					fee = int(fee)
+					fee = 300
 					message = ""
-					version = "1"
+					version = 4
 					date = int(time.time())
-					txinfo = str(amount) + "-" + str(fee) + "-"  + str(dest) + "-" + str(message) + "-" + str(version) + "-" + str(walletinfo[2]) + "-" + str(date)
+					txinfo = str(amount) + "-" + str(date) + "-"  + str(dest) + "-" + str(fee) + "-" + str(message) + "-" + str(walletinfo[2]) + "--" + str(version)
 					signature = ec_sign(txinfo, walletinfo[3])
 					validateinput = ""
 					print("Sending " + str(round(float(amount)/decimal, pdecimal)) + " STLX to " + dest + ", with fees: " + str(round(float(fee)/decimal, pdecimal)) + " STLX.")
@@ -358,8 +355,8 @@ def suboption(walletinfo):
 						if validateinput.lower() == "y":
 							print("")
 							print("Sending...")
-							url = 'https://' + str(node) + '/server.php?q=transfer'
-							txvalues = {'amount' : str(amount), 'fee' : str(fee), 'dest' : str(dest), 'pubkey' : str(walletinfo[2]), 'date' : str(date), 'version' : str(version), 'message' : str(message), 'signature' : str(signature) }
+							url = 'https://' + str(node) + '/api?q=transfer'
+							txvalues = {'amount' : str(amount), 'fee' : str(fee), 'dest' : str(dest), 'pubkey' : str(walletinfo[2]), 'date' : str(date), 'version' : str(version), 'message' : str(message), 'signature' : str(signature), 'token' : '' }
 							txjson = json.dumps(txvalues)
 							txresponse = s.post(url, json=txjson)
 							txjsondata = txresponse.json()
@@ -380,7 +377,7 @@ def suboption(walletinfo):
 			if len(soption) == 4:
 				try:
 					token = str(soption[1])
-					tresponse = requests.get('https://' + str(node) + '/server.php?q=gettokeninfo&token=' + str(token).upper())
+					tresponse = requests.get('https://' + str(node) + '/api?q=gettokeninfo&token=' + str(token).upper())
 					tdata = tresponse.json()
 					if tdata["status"] == "OK":
 						tokendecimal = pow(10, int(tdata["token"][0]["decimals"]))
@@ -388,13 +385,12 @@ def suboption(walletinfo):
 						amount = float(soption[3])
 						amount = amount*tokendecimal
 						dest = suboption.split(" ")[2]
-						fee = 100
+						fee = 300
 						amount = int(amount)
-						fee = int(fee)
 						message = ""
-						version = "1"
+						version = 4
 						date = int(time.time())
-						txinfo = str(amount) + "-" + str(fee) + "-"  + str(dest) + "-" + str(message) + "-" + str(version) + "-" + str(walletinfo[2]) + "-" + str(date) + "-" + str(token)
+						txinfo = str(amount) + "-" + str(date) + "-"  + str(dest) + "-" + str(fee) + "-" + str(message) + "-" + str(walletinfo[2]) + "-" + str(token) + "-" + str(version)
 						signature = ec_sign(txinfo, walletinfo[3])
 						validateinput = ""
 						print("Sending " + str(round(float(amount)/tokendecimal, ptokendecimal)) + " " + str(token) + " to " + dest + ", with fees: " + str(round(float(fee)/decimal, ptokendecimal)) + " STLX.")
@@ -404,8 +400,8 @@ def suboption(walletinfo):
 							if validateinput.lower() == "y":
 								print("")
 								print("Sending...")
-								url = 'https://' + str(node) + '/server.php?q=transfer&symbol=' + str(token)
-								txvalues = {'amount' : str(amount), 'fee' : str(fee), 'dest' : str(dest), 'pubkey' : str(walletinfo[2]), 'date' : str(date), 'version' : str(version), 'message' : str(message), 'signature' : str(signature) }
+								url = 'https://' + str(node) + '/api?q=transfer'
+								txvalues = {'amount' : str(amount), 'fee' : str(fee), 'dest' : str(dest), 'pubkey' : str(walletinfo[2]), 'date' : str(date), 'version' : str(version), 'message' : str(message), 'signature' : str(signature), 'token' : str(token) }
 								txjson = json.dumps(txvalues)
 								txresponse = s.post(url, json=txjson)
 								txjsondata = txresponse.json()
@@ -488,6 +484,7 @@ if __name__ == '__main__':
 		print("X: Close wallet. ")
 		print(" ")
 		option = ""
+		print(balloon_hash("hola", "adios"))
 		while option.lower() != "n" and option.lower() != "o" and option.lower() != "x":
 			option = input("Type an option:  ")
 			if option.lower() == "n":
